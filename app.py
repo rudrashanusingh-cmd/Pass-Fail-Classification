@@ -18,6 +18,7 @@ st.title("🎓 Student Performance Predictor")
 study_hours = st.number_input("Study Hours", 0.0, 24.0)
 attendance = st.number_input("Attendance (%)", 0.0, 100.0)
 previous_grade = st.number_input("Previous Grade", 0.0, 100.0)
+age = st.number_input("Age", 0.0, 100.0)
 
 # ======================
 # PREDICT

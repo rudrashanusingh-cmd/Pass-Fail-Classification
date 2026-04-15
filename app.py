@@ -4,7 +4,6 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
 import joblib
 import os
@@ -14,7 +13,7 @@ st.set_page_config(page_title="Student Predictor", page_icon="🎓")
 st.title("🎓 Student Pass / Fail Predictor")
 
 # ==============================
-# 2. LOAD DATA
+# 2. LOAD DATASET
 # ==============================
 df = pd.read_csv("pass_fail_dataset.csv")
 
@@ -24,92 +23,95 @@ df = pd.get_dummies(df, drop_first=True)
 X = df.drop('pass', axis=1)
 y = df['pass']
 
-X_train, X_test, y_train, y_test = train_test_split(
-    X, y, test_size=0.2, random_state=42
-)
-
 # ==============================
 # 3. TRAIN / LOAD MODEL
 # ==============================
 model_file = "student_model.pkl"
 
 if not os.path.exists(model_file):
-    model = RandomForestClassifier()
-    model.fit(X_train, y_train)
+    model = RandomForestClassifier(n_estimators=100, random_state=42)
+    model.fit(X, y)
     joblib.dump(model, model_file)
 else:
     model = joblib.load(model_file)
 
 # ==============================
-# 4. USER INPUT
+# 4. CALCULATE THRESHOLDS
 # ==============================
-st.subheader("📥 Enter Student Details")
-
-study_hours = st.slider("Study Hours", 0.0, 12.0, 5.0)
-attendance = st.slider("Attendance (%)", 0.0, 100.0, 70.0)
-previous_score = st.slider("Previous Score", 0.0, 100.0, 60.0)
-
-# ==============================
-# 5. PREDICTION
-# ==============================
-if st.button("Predict"):
-
-    features = np.array([[study_hours, attendance, previous_score]])
-    prediction = model.predict(features)[0]
-
-    if prediction == 1:
-        st.success("✅ Student will PASS")
-    else:
-        st.error("❌ Student may FAIL")
-
-# ==============================
-# 6. DATASET INSIGHTS (AUTO)
-# ==============================
-st.subheader("📊 Dataset Insights")
-
 pass_data = df[df['pass'] == 1]
 fail_data = df[df['pass'] == 0]
 
-st.write("### ✅ PASS Ranges (from dataset)")
-st.write({
-    "Study Hours": (round(pass_data.iloc[:,0].min(),2), round(pass_data.iloc[:,0].max(),2)),
-    "Attendance": (round(pass_data.iloc[:,1].min(),2), round(pass_data.iloc[:,1].max(),2)),
-    "Previous Score": (round(pass_data.iloc[:,2].min(),2), round(pass_data.iloc[:,2].max(),2))
-})
+cols = X.columns
 
-st.write("### ❌ FAIL Ranges (from dataset)")
-st.write({
-    "Study Hours": (round(fail_data.iloc[:,0].min(),2), round(fail_data.iloc[:,0].max(),2)),
-    "Attendance": (round(fail_data.iloc[:,1].min(),2), round(fail_data.iloc[:,1].max(),2)),
-    "Previous Score": (round(fail_data.iloc[:,2].min(),2), round(fail_data.iloc[:,2].max(),2))
-})
+# Dynamic thresholds for all features
+thresholds = {}
+for col in cols:
+    thresholds[col] = (pass_data[col].min() + fail_data[col].max()) / 2
 
 # ==============================
-# 7. SIMPLE RULE (DERIVED)
+# 5. USER INPUT (NOW WITH AGE)
 # ==============================
-st.subheader("🎯 Simple Rule (Approx)")
+st.subheader("📥 Enter Details")
 
-st.info("""
-If:
-- Study Hours > 5  
-- Attendance > 70%  
-- Previous Score > 65  
+inputs = {}
 
-➡️ PASS likely  
-Else ➡️ FAIL likely
-""")
+for col in cols:
+    if "age" in col.lower():
+        inputs[col] = st.slider("Age", 10, 100, int(thresholds[col]))
+    elif "study" in col.lower():
+        inputs[col] = st.slider("Study Hours", 0.0, 12.0, float(thresholds[col]))
+    elif "att" in col.lower():
+        inputs[col] = st.slider("Attendance (%)", 0.0, 100.0, float(thresholds[col]))
+    elif "score" in col.lower() or "grade" in col.lower():
+        inputs[col] = st.slider("Previous Score", 0.0, 100.0, float(thresholds[col]))
+    else:
+        inputs[col] = st.number_input(col, value=float(thresholds[col]))
+
+# ==============================
+# 6. PREDICTION
+# ==============================
+if st.button("Predict"):
+
+    feature_values = np.array([list(inputs.values())])
+
+    # Model prediction
+    model_pred = model.predict(feature_values)[0]
+
+    # Rule-based prediction
+    rule_pred = 1
+    for col in cols:
+        if inputs[col] < thresholds[col]:
+            rule_pred = 0
+            break
+
+    st.subheader("📊 Result")
+
+    if model_pred == 1:
+        st.success("✅ Model: PASS")
+    else:
+        st.error("❌ Model: FAIL")
+
+    if rule_pred == 1:
+        st.info("🎯 Rule: PASS")
+    else:
+        st.warning("⚠️ Rule: FAIL")
+
+# ==============================
+# 7. SHOW RULE
+# ==============================
+st.subheader("🎯 Dataset Rule")
+
+for col in cols:
+    st.write(f"{col} ≥ {round(thresholds[col],2)}")
 
 # ==============================
 # 8. FEATURE IMPORTANCE
 # ==============================
 st.subheader("🔥 Feature Importance")
 
-importance = model.feature_importances_
-feature_names = X.columns
-
 importance_df = pd.DataFrame({
-    "Feature": feature_names,
-    "Importance": importance
+    "Feature": X.columns,
+    "Importance": model.feature_importances_
 }).sort_values(by="Importance", ascending=False)
 
 st.bar_chart(importance_df.set_index("Feature"))

@@ -9,7 +9,16 @@ import os
 from sklearn.ensemble import RandomForestClassifier
 
 # ==============================
-# 2. LOAD / TRAIN MODEL
+# 2. PAGE CONFIG
+# ==============================
+st.set_page_config(
+    page_title="Student Predictor",
+    page_icon="🎓",
+    layout="wide"
+)
+
+# ==============================
+# 3. LOAD / TRAIN MODEL
 # ==============================
 model_file = "student_model.pkl"
 
@@ -18,9 +27,7 @@ def load_model():
     if os.path.exists(model_file):
         return joblib.load(model_file)
     else:
-        # Train model if not exists
         df = pd.read_csv("student_data.csv")
-
         df.fillna(df.mean(numeric_only=True), inplace=True)
         df = pd.get_dummies(df, drop_first=True)
 
@@ -36,28 +43,58 @@ def load_model():
 model = load_model()
 
 # ==============================
-# 3. STREAMLIT UI
+# 4. SIDEBAR
 # ==============================
-st.title("🎓 Student Pass Prediction App")
+st.sidebar.title("⚙️ Settings")
+st.sidebar.write("Adjust input values")
 
-st.write("Enter student details:")
-
-study_hours = st.number_input("Study Hours", min_value=0.0, max_value=24.0, step=0.5)
-attendance = st.number_input("Attendance (%)", min_value=0.0, max_value=100.0, step=1.0)
-previous_grade = st.number_input("Previous Grade", min_value=0.0, max_value=100.0, step=1.0)
+study_hours = st.sidebar.slider("📘 Study Hours", 0.0, 24.0, 5.0)
+attendance = st.sidebar.slider("📅 Attendance (%)", 0.0, 100.0, 75.0)
+previous_grade = st.sidebar.slider("📊 Previous Grade", 0.0, 100.0, 60.0)
 
 # ==============================
-# 4. PREDICTION
+# 5. MAIN UI
 # ==============================
-if st.button("Predict"):
+st.title("🎓 Student Pass Prediction Dashboard")
+st.markdown("---")
+
+col1, col2, col3 = st.columns(3)
+
+col1.metric("Study Hours", study_hours)
+col2.metric("Attendance", f"{attendance}%")
+col3.metric("Previous Grade", previous_grade)
+
+st.markdown("---")
+
+# ==============================
+# 6. PREDICTION BUTTON
+# ==============================
+if st.button("🚀 Predict Result"):
     try:
         features = np.array([[study_hours, attendance, previous_grade]])
         prediction = model.predict(features)
 
+        st.markdown("## 🔍 Prediction Result")
+
         if prediction[0] == 1:
             st.success("✅ Student will PASS")
+            st.balloons()
         else:
             st.error("❌ Student will FAIL")
 
+        # Simple visualization
+        st.markdown("### 📊 Input Summary")
+        chart_data = pd.DataFrame({
+            "Feature": ["Study Hours", "Attendance", "Previous Grade"],
+            "Value": [study_hours, attendance, previous_grade]
+        })
+        st.bar_chart(chart_data.set_index("Feature"))
+
     except Exception as e:
         st.error(f"Error: {e}")
+
+# ==============================
+# 7. FOOTER
+# ==============================
+st.markdown("---")
+st.caption("Built with ❤️ using Streamlit")

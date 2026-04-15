@@ -1,75 +1,63 @@
 # ==============================
 # 1. IMPORT LIBRARIES
 # ==============================
+import streamlit as st
 import pandas as pd
 import numpy as np
-from flask import Flask, request, jsonify
-from sklearn.model_selection import train_test_split
-from sklearn.ensemble import RandomForestClassifier
 import joblib
 import os
+from sklearn.ensemble import RandomForestClassifier
 
 # ==============================
-# 2. LOAD & PREPARE DATA
-# ==============================
-df = pd.read_csv("student_data.csv")
-
-# Fill missing values
-df.fillna(df.mean(numeric_only=True), inplace=True)
-
-# Convert categorical to numeric
-df = pd.get_dummies(df, drop_first=True)
-
-# Split data
-X = df.drop('pass', axis=1)
-y = df['pass']
-
-X_train, X_test, y_train, y_test = train_test_split(
-    X, y, test_size=0.2, random_state=42
-)
-
-# ==============================
-# 3. TRAIN MODEL (only once)
+# 2. LOAD / TRAIN MODEL
 # ==============================
 model_file = "student_model.pkl"
 
-if not os.path.exists(model_file):
-    model = RandomForestClassifier()
-    model.fit(X_train, y_train)
-    joblib.dump(model, model_file)
-    print("Model trained and saved!")
-else:
-    model = joblib.load(model_file)
-    print("Model loaded!")
+@st.cache_resource
+def load_model():
+    if os.path.exists(model_file):
+        return joblib.load(model_file)
+    else:
+        # Train model if not exists
+        df = pd.read_csv("student_data.csv")
+
+        df.fillna(df.mean(numeric_only=True), inplace=True)
+        df = pd.get_dummies(df, drop_first=True)
+
+        X = df.drop('pass', axis=1)
+        y = df['pass']
+
+        model = RandomForestClassifier()
+        model.fit(X, y)
+
+        joblib.dump(model, model_file)
+        return model
+
+model = load_model()
 
 # ==============================
-# 4. CREATE FLASK APP
+# 3. STREAMLIT UI
 # ==============================
-app = Flask(__name__)
+st.title("🎓 Student Pass Prediction App")
 
-@app.route("/")
-def home():
-    return "Student Prediction API Running"
+st.write("Enter student details:")
 
-@app.route("/predict", methods=["POST"])
-def predict():
+study_hours = st.number_input("Study Hours", min_value=0.0, max_value=24.0, step=0.5)
+attendance = st.number_input("Attendance (%)", min_value=0.0, max_value=100.0, step=1.0)
+previous_grade = st.number_input("Previous Grade", min_value=0.0, max_value=100.0, step=1.0)
+
+# ==============================
+# 4. PREDICTION
+# ==============================
+if st.button("Predict"):
     try:
-        data = request.json
-
-        # Input example: [study_hours, attendance, previous_grade]
-        features = np.array(data['features']).reshape(1, -1)
-
+        features = np.array([[study_hours, attendance, previous_grade]])
         prediction = model.predict(features)
 
-        return jsonify({
-            "prediction": int(prediction[0])
-        })
+        if prediction[0] == 1:
+            st.success("✅ Student will PASS")
+        else:
+            st.error("❌ Student will FAIL")
 
     except Exception as e:
-        return jsonify({"error": str(e)})
-
-# ==============================
-# 5. RUN SERVER
-# ==============================
-if __name__ == "__main__":
-    app.run(debug=True)
+        st.error(f"Error: {e}")

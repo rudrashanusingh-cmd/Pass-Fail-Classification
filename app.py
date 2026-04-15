@@ -34,30 +34,3 @@ if st.button("Predict"):
         st.error(f"Error: {e}")
 
 
-
-
-
-
-
-st.subheader("📊 Approximate Pass/Fail Ranges")
-
-if st.button("Show Ranges"):
-    results = []
-
-    for study in range(0, 25, 2):
-        for attend in range(0, 101, 10):
-            for prev in range(0, 101, 10):
-                features = np.array([[age, study, attend, prev]])
-                pred = model.predict(features)[0]
-
-                results.append((study, attend, prev, pred))
-
-    # Show simple patterns
-    pass_cases = [r for r in results if r[3] == 1]
-    fail_cases = [r for r in results if r[3] == 0]
-
-    st.write("### ✅ Typical PASS pattern")
-    st.write(pass_cases[:10])   # sample
-
-    st.write("### ❌ Typical FAIL pattern")
-    st.write(fail_cases[:10])   # sample

@@ -93,8 +93,8 @@ if st.button("Predict"):
 
     if rule_pred == 1:
         st.info("🎯 Rule: PASS")
-    else:
-        st.warning("⚠️ Rule: FAIL")
+    # else:
+    #     st.warning("⚠️ Rule: FAIL")
 
 # ==============================
 # 7. SHOW RULE

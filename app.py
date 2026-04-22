@@ -1,59 +1,103 @@
 # ==============================
 # 1. IMPORT LIBRARIES
 # ==============================
-import streamlit as st
+import pandas as pd
 import numpy as np
+from flask import Flask, request, jsonify
+from sklearn.model_selection import train_test_split
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.linear_model import LogisticRegression
 import joblib
+import os
 
 # ==============================
-# 2. LOAD MODELS
+# 2. LOAD & PREPARE DATA
 # ==============================
-rf_model = joblib.load("rf_model.pkl")
-dt_model = joblib.load("dt_model.pkl")
-lr_model = joblib.load("lr_model.pkl")
+df = pd.read_csv("pass_fail_dataset_extended.csv")
 
-# ==============================
-# 3. STREAMLIT UI
-# ==============================
-st.set_page_config(page_title="Student Pass/Fail Predictor", layout="centered")
+df.fillna(df.mean(numeric_only=True), inplace=True)
+df = pd.get_dummies(df, drop_first=True)
 
-st.title("🎓 Student Pass/Fail Prediction")
-st.write("Enter student details to predict result")
+X = df.drop('pass', axis=1)
+y = df['pass']
 
-# Example inputs (change according to your dataset columns)
-feature1 = st.number_input("Feature 1", value=0.0)
-feature2 = st.number_input("Feature 2", value=0.0)
-feature3 = st.number_input("Feature 3", value=0.0)
+# 🔥 Save column order (VERY IMPORTANT)
+model_columns = X.columns
 
-# Model selection
-model_choice = st.selectbox(
-    "Choose Model",
-    ["Random Forest", "Decision Tree", "Logistic Regression"]
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, test_size=0.2, random_state=42
 )
 
 # ==============================
-# 4. PREDICTION
+# 3. TRAIN MODELS
 # ==============================
-if st.button("Predict"):
-    features = np.array([[feature1, feature2, feature3]])
+rf_file = "rf_model.pkl"
+dt_file = "dt_model.pkl"
+lr_file = "lr_model.pkl"
 
-    if model_choice == "Decision Tree":
-        prediction = dt_model.predict(features)
-        model_used = "Decision Tree"
-    elif model_choice == "Logistic Regression":
-        prediction = lr_model.predict(features)
-        model_used = "Logistic Regression"
-    else:
-        prediction = rf_model.predict(features)
-        model_used = "Random Forest"
+# Random Forest
+if not os.path.exists(rf_file):
+    rf_model = RandomForestClassifier()
+    rf_model.fit(X_train, y_train)
+    joblib.dump(rf_model, rf_file)
+else:
+    rf_model = joblib.load(rf_file)
 
-    result = "Pass ✅" if prediction[0] == 1 else "Fail ❌"
+# Decision Tree
+if not os.path.exists(dt_file):
+    dt_model = DecisionTreeClassifier()
+    dt_model.fit(X_train, y_train)
+    joblib.dump(dt_model, dt_file)
+else:
+    dt_model = joblib.load(dt_file)
 
-    st.subheader(f"Result: {result}")
-    st.write(f"Model Used: {model_used}")
+# Logistic Regression
+if not os.path.exists(lr_file):
+    lr_model = LogisticRegression(max_iter=1000)
+    lr_model.fit(X_train, y_train)
+    joblib.dump(lr_model, lr_file)
+else:
+    lr_model = joblib.load(lr_file)
 
 # ==============================
-# 5. FOOTER
+# 4. CREATE FLASK APP
 # ==============================
-st.markdown("---")
-st.write("Made with Streamlit")
+app = Flask(__name__)
+
+@app.route("/predict", methods=["POST"])
+def predict():
+    try:
+        data = request.json
+
+        input_data = pd.DataFrame([{
+            "study_hours": data["study_hours"],
+            "attendance": data["attendance"],
+            "previous_score": data["previous_score"]
+        }])
+
+        # 🔥 Align columns with training data
+        input_data = input_data.reindex(columns=model_columns, fill_value=0)
+
+        model_type = data.get("model", "rf")
+
+        if model_type == "dt":
+            prediction = dt_model.predict(input_data)
+        elif model_type == "lr":
+            prediction = lr_model.predict(input_data)
+        else:
+            prediction = rf_model.predict(input_data)
+
+        return jsonify({
+            "model_used": model_type,
+            "prediction": int(prediction[0])
+        })
+
+    except Exception as e:
+        return jsonify({"error": str(e)})
+
+# ==============================
+# 5. RUN SERVER
+# ==============================
+if __name__ == "__main__":
+    app.run(debug=True)
